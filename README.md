@@ -42,10 +42,10 @@ Phase 6 generates a replacement palette. For sequential palettes, colors are ord
 
 ## Setup
 
-Requires Python 3.8+ with numpy and lxml:
+Requires Python 3.8+ with numpy, lxml, and Pillow (Pillow is only needed for SVGs that embed raster-image legends):
 
 ```bash
-pip install numpy lxml
+pip install numpy lxml Pillow
 ```
 
 ## Usage
@@ -109,17 +109,18 @@ Each JSON report in `output/reports/` documents all 6 phases. Here's an example:
 
 Status values: `passed` means already accessible, `recolored` means successfully repaired and verified, `recolored_with_warnings` means repaired but verification was incomplete, `skipped` means fewer than 2 data colors detected, `failed_to_recolor` means no passing palette could be generated, and `error` means a processing error occurred.
 
-## Test cases
+## Test cases and evaluation
+- `Full Corpus/` — the 63-case evaluation corpus from Chapter 3 of the thesis, sampled from VisAnatomy and Wikimedia Commons across categorical, sequential, and diverging palettes. Pre-computed runs live under `results/full_corpus_deutan/` and `results/full_corpus_protan/`, with aggregates in `results/ch5_results.md`.
 
-The `test_svgs/` folder contains 7 test cases spanning all three palette types, organized by how badly they degrade under CVD.
+Headline numbers from the thesis (Chapter 5):
 
-Already accessible (Tier 1): a blue+orange bar chart with ΔE=62.55, and a single-hue blue ramp with monotonic L*.
-
-Partially degraded (Tier 2): a diverging palette-data mismatch case.
-
-Severely degraded (Tier 3): a red/green/orange stacked bar with min ΔE=4.81, a green-yellow-red heatmap with L* reversal, an election-style diverging map with endpoint merge at ΔE=5.33, and a 6-color scatter with min ΔE=2.24.
-
-Regenerate test cases with `python3 generate_tests.py`.
+| Palette type | Invariant                  | Before → After |
+|--------------|----------------------------|----------------|
+| Categorical  | Pairwise distinguishability | 35% → 100%    |
+| Sequential   | Lightness monotonicity     | 25% → 97%      |
+| Sequential   | Perceptual uniformity      | 28% → 100%     |
+| Diverging    | Bidirectional separability | 3% → 77%       |
+| Diverging    | Midpoint integrity         | 90% → 97%      |
 
 ## File structure
 
@@ -132,19 +133,47 @@ data_signal_extractor.py   Phase 3: data characteristic extraction
 reconciler.py              Phase 4: palette vs data reconciliation
 invariant_tests.py         Phase 5: CVD simulation and invariant testing
 recolorer.py               Phase 6: repair strategies per palette type
-generate_tests.py          test case generator
+server/                    Flask wrapper used by the Chrome extension
+extension/                 MV3 Chrome extension (popup, content script)
 test_svgs/                 7 curated test cases
 input_svgs/                your SVGs go here
-output/                    generated output
+Full Corpus/               63-case evaluation corpus (VisAnatomy + Wikimedia)
+results/                   pre-computed evaluation outputs and ch. 5 figures
+figure_ch1/, Geo_examples/ figure assets used in the thesis
+output/                    generated when you run main.py
 ```
 
 ## Color science details
 
 CVD simulation uses the Machado, Oliveira, and Fernandes (2009) physiologically-based model, which simulates anomalous trichromacy with variable severity by manipulating spectral absorption functions. This is more accurate than the older Brettel et al. (1997) projection method.
 
-Color distance uses CIEDE2000 (Sharma et al. 2005), the current standard for perceptual color difference. Key thresholds: categorical pairwise minimum ΔE >= 8, diverging endpoint minimum ΔE > 10, sequential adjacent minimum ΔL* >= 3.
+Color distance uses CIEDE2000 (Sharma et al. 2005), the current standard for perceptual color difference. Key thresholds: categorical pairwise minimum ΔE >= 8, diverging endpoint minimum ΔE > 10, sequential adjacent minimum ΔL* >= 3. The categorical threshold of 8 was calibrated against the CVD-safe replacement palettes themselves: Okabe-Ito, Wong, and IBM Design reliably clear ΔE = 8 under simulation but not always 10, so a stricter cutoff would disqualify them as valid replacements (see Chapter 4 of the thesis).
 
 The tool includes embedded CVD-safe palettes for repairs: Okabe-Ito, IBM Design, and Wong for categorical; single-hue blue, purple, and orange ramps for sequential; and blue-orange, purple-green, and blue-red endpoint pairs for diverging.
+
+## Chrome extension
+
+A Chrome extension wraps the pipeline so any SVG chart on a page can be recolored in place. It talks to a small Flask wrapper (`server/app.py`) that runs the same pipeline as the CLI; the extension swaps in the corrected SVG returned by the server, so what shows up on the page is byte-identical to what `main.py` writes to `corrected/`.
+
+To run it:
+
+```bash
+# 1. Start the local server (leave running)
+pip install -r server/requirements.txt
+python3 server/app.py
+
+# 2. Load the extension in Chrome
+#    - open  chrome://extensions/
+#    - turn on Developer mode (top right)
+#    - click  Load unpacked  →  select the  extension/  folder
+#    - to test on local .svg files: click  Details  →  Allow access to file URLs
+
+# 3. Open any SVG (corpus file or any chart on the web), click the VCR icon,
+#    pick a CVD type, flip "Show correction".
+open -a "Google Chrome" "input_svgs/BarChart12.svg"
+```
+
+The extension only handles `fill=` / inline `style=` colors and won't reach SVGs inside iframes; D3/Vega charts that re-render on hover will need a re-toggle. Full notes in `extension/README.md`.
 
 ## References
 

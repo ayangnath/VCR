@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>VCR</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup">
+    <div class="popup-header">
+      <div class="popup-title">
+        <div class="popup-icon"></div>
+        VCR — Visualization Color Repair
+      </div>
+      <div class="popup-badge" id="svgCountBadge">…</div>
+    </div>
+
+    <div class="popup-body">
+      <div class="svg-selector" id="svgSelector" style="display:none;">
+        <span class="svg-selector-label">SVG</span>
+        <select id="svgPicker"></select>
+      </div>
+
+      <div class="top-row">
+        <select class="cvd-select" id="cvdSelect">
+          <option value="deutan" selected>Deuteranopia</option>
+          <option value="protan">Protanopia</option>
+          <option value="tritan">Tritanopia</option>
+        </select>
+        <div class="type-chip" id="typeChip">—</div>
+      </div>
+
+      <div class="mismatch-banner" id="mismatchBanner" style="display:none;">
+        <div class="mismatch-title">Palette ↔ data mismatch</div>
+        <div class="mismatch-text" id="mismatchText"></div>
+      </div>
+
+      <div class="toggle-row">
+        <span class="toggle-label-text">Show correction</span>
+        <div class="toggle-track off" id="toggleTrack">
+          <div class="toggle-thumb"></div>
+        </div>
+      </div>
+
+      <div class="preview-area">
+        <div class="swatch-row">
+          <div class="swatch-row-label">Original</div>
+          <div class="swatch-row-strip" id="origStrip"></div>
+        </div>
+        <div class="swatch-row">
+          <div class="swatch-row-label" id="correctedLabel">Corrected (off)</div>
+          <div class="swatch-row-strip" id="correctedStrip" style="opacity:0.3;"></div>
+        </div>
+        <div class="preview-hint" id="previewHint">Toggle above to recolor the chart on the page.</div>
+      </div>
+
+      <div class="status" id="status"></div>
+    </div>
+
+    <div class="popup-footer">
+      <span class="footer-meta" id="footerMeta">v0.1.0 · localhost:5000</span>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

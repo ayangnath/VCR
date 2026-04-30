@@ -19,6 +19,7 @@ Runs on localhost:5000. Allows any chrome-extension:// origin via CORS.
 """
 
 import hashlib
+import io
 import os
 import sys
 import tempfile
@@ -51,7 +52,7 @@ def _svg_hash(svg_text):
     return hashlib.sha1(svg_text.encode("utf-8")).hexdigest()
 
 
-def _build_response(report):
+def _build_response(report, parsed=None):
     phases = report.get("phases", {})
     p1 = phases.get("phase1", {})
     p2 = phases.get("phase2", {})
@@ -63,6 +64,20 @@ def _build_response(report):
     mapping = p6.get("color_mapping", {}) or {}
     new_palette = p6.get("new_palette") or p1.get("original_palette", [])
 
+    # When recoloring was applied, serialize the corrected SVG (identical
+    # bytes to what the CLI writes to corrected/) so the extension can
+    # swap the entire SVG element rather than re-implementing the apply
+    # step (legend sync, raster legend pixel ops, DR6/DR7 logic) in JS.
+    corrected_svg = None
+    if parsed is not None and report.get("recoloring_applied"):
+        try:
+            buf = io.BytesIO()
+            parsed.tree.write(buf, xml_declaration=True,
+                              encoding="utf-8", pretty_print=True)
+            corrected_svg = buf.getvalue().decode("utf-8")
+        except Exception:
+            corrected_svg = None
+
     return {
         "status": report.get("status"),
         "palette_type": palette_type,
@@ -73,6 +88,7 @@ def _build_response(report):
         "mismatch": bool(p3.get("possible_mismatch")),
         "mismatch_reason": p4.get("mismatch_explanation"),
         "warnings": report.get("warnings", []),
+        "corrected_svg": corrected_svg,
     }
 
 
@@ -102,14 +118,14 @@ def detect():
         tmp_path = tmp.name
 
     try:
-        _, report = process_single_svg(tmp_path, cvd_type=cvd_type)
+        parsed, report = process_single_svg(tmp_path, cvd_type=cvd_type)
     finally:
         try:
             os.unlink(tmp_path)
         except OSError:
             pass
 
-    response = _build_response(report)
+    response = _build_response(report, parsed=parsed)
     _result_cache[cache_key] = response
     return jsonify(response)
 
