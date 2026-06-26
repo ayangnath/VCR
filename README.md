@@ -1,4 +1,4 @@
-# CVD-Aware SVG Recoloring Tool
+# VCR (Visualization Color Repair)
 
 A signal-aware recoloring tool for making SVG data visualizations accessible to viewers with Color Vision Deficiency (CVD). Unlike global color filters that treat all colors uniformly, this tool understands what role colors play in encoding data and applies corrections that preserve the intended data signal.
 
