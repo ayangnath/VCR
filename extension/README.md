@@ -36,7 +36,11 @@ flip it off to revert.
 - `content.js` — discovers SVGs ≥60×60 px on the page, serializes them
   for the server, and applies / reverts mappings.
 
-## Known limitations (v1)
+## Known limitations
+
+(`../extension-pyodide/` is the recommended extension and has since closed
+some of these — iframe and `<img src="chart.svg">` support — see its
+README. This one stays simpler/Flask-backed.)
 
 - **Server must be running.** No fallback; the popup will surface
   "Server not reachable" if `:5000` is down.

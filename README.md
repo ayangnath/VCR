@@ -133,8 +133,9 @@ data_signal_extractor.py   Phase 3: data characteristic extraction
 reconciler.py              Phase 4: palette vs data reconciliation
 invariant_tests.py         Phase 5: CVD simulation and invariant testing
 recolorer.py               Phase 6: repair strategies per palette type
-server/                    Flask wrapper used by the Chrome extension
-extension/                 MV3 Chrome extension (popup, content script)
+extension-pyodide/         MV3 Chrome extension (recommended) -- runs the pipeline in-browser via Pyodide/WASM
+extension/                 MV3 Chrome extension (alternative) -- talks to server/ over localhost
+server/                    Flask wrapper used by extension/
 test_svgs/                 7 curated test cases
 input_svgs/                your SVGs go here
 Full Corpus/               63-case evaluation corpus (VisAnatomy + Wikimedia)
@@ -153,9 +154,53 @@ The tool includes embedded CVD-safe palettes for repairs: Okabe-Ito, IBM Design,
 
 ## Chrome extension
 
-A Chrome extension wraps the pipeline so any SVG chart on a page can be recolored in place. It talks to a small Flask wrapper (`server/app.py`) that runs the same pipeline as the CLI; the extension swaps in the corrected SVG returned by the server, so what shows up on the page is byte-identical to what `main.py` writes to `corrected/`.
+A Chrome extension wraps the pipeline so any SVG chart on a page can be
+recolored in place: it scans the page for charts (inline `<svg>`, charts
+inside iframes, and charts embedded as `<img src="chart.svg">`), runs the
+same 6-phase pipeline as the CLI, and swaps in the corrected SVG, so what
+shows up on the page is byte-identical to what `main.py` writes to
+`corrected/`. There are two backends; **`extension-pyodide/` is the one to
+use** — it's self-contained, with `extension/` kept around as a
+Flask-backed alternative (closer to how this was originally built).
 
-To run it:
+### extension-pyodide/ — in-browser, no server (recommended)
+
+Runs the pipeline entirely in-browser via [Pyodide](https://pyodide.org)
+(WASM) — no local server, nothing to install beyond the one-time runtime
+fetch. Boots Pyodide in an MV3 offscreen document (~3-5s one-time cost,
+warmed automatically on install) and produces byte-identical output to the
+CLI.
+
+```bash
+# 1. Fetch + vendor the Pyodide runtime (one-time)
+cd extension-pyodide
+./scripts/fetch_pyodide.sh
+./scripts/vendor_pyodide.sh
+
+# 2. Load it in Chrome
+#    - open  chrome://extensions/
+#    - turn on Developer mode (top right)
+#    - click  Load unpacked  →  select the  extension-pyodide/  folder
+#    - to test on local .svg files: click  Details  →  Allow access to file URLs
+
+# 3. Open any SVG (corpus file or any chart on the web), click the VCR icon,
+#    pick a CVD type, flip "Show correction".
+open -a "Google Chrome" "input_svgs/BarChart12.svg"
+```
+
+Full setup, architecture, and known risks (lxml version drift between the
+server's venv and Pyodide's bundled lxml) in `extension-pyodide/README.md`.
+Editing a pipeline file at the repo root? Run
+`extension-pyodide/scripts/sync_pipeline.sh` afterward — Pyodide runs in a
+sandboxed filesystem with its own copies, not a live view of the repo.
+
+### extension/ — local Flask server (alternative)
+
+What this was originally built as: a small Flask wrapper (`server/app.py`)
+runs the same pipeline as the CLI, and the extension talks to it over
+`localhost`. Functionally narrower than `extension-pyodide/` right now (no
+iframe or `<img>`-embedded SVG support yet), but simpler to reason about
+since there's no WASM runtime involved.
 
 ```bash
 # 1. Start the local server (leave running)
@@ -173,14 +218,12 @@ python3 server/app.py
 open -a "Google Chrome" "input_svgs/BarChart12.svg"
 ```
 
-The extension only handles `fill=` / inline `style=` colors and won't reach SVGs inside iframes; D3/Vega charts that re-render on hover will need a re-toggle. Full notes in `extension/README.md`.
+Full notes in `extension/README.md`.
 
-## References
+### Shared limitations (both backends)
 
-Machado, G. M., Oliveira, M. M., & Fernandes, L. A. (2009). A physiologically-based model for simulation of color vision deficiency. IEEE TVCG, 15(6), 1291-1298.
-
-Sharma, G., Wu, W., & Dalal, E. N. (2005). The CIEDE2000 color-difference formula: Implementation notes. Color Research & Application, 30(1), 21-30.
-
-Chen, Z., et al. (2025). VisAnatomy: An SVG chart corpus with fine-grained semantic labels. arXiv:2410.12268.
-
-Brettel, H., Vienot, F., & Mollon, J. D. (1997). Computerized simulation of color appearance for dichromats. JOSA A, 14(10), 2647-2655.
+Only `fill=` / inline `style=` colors are remapped, not stylesheet rules;
+D3/Vega charts that re-render on hover will lose the correction and need a
+re-toggle; canvas-rendered charts can't be recolored at all (no DOM/markup
+to target — a different approach entirely, and arguably the wrong one for
+this tool's premise).

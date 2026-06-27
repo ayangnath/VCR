@@ -72,7 +72,7 @@ re-opening the popup doesn't re-run the pipeline.
 
 Returns `{"ok": true}` when the server is up.
 
-## Known limitations (v1)
+## Known limitations
 
 - **Re-rendering charts overwrite the applied colors.** D3 / Vega / Observable
   charts often re-render on hover or resize. The content script does not yet
@@ -86,6 +86,6 @@ Returns `{"ok": true}` when the server is up.
   iframes, which the content script cannot reach with `activeTab`.
 - **Single candidate palette.** The server returns one corrected palette per
   SVG — the first that passed verification during the pipeline's three repair
-  attempts. The mockup's palette-cycling UI is not wired up in v1.
+  attempts. The mockup's palette-cycling UI is not wired up.
 - **CORS uses `*`.** Fine for local dev; tighten before exposing the server
   to anything other than localhost.

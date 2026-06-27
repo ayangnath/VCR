@@ -1,0 +1,243 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #fff;
+}
+
+.popup {
+  width: 320px;
+  background: #fff;
+}
+
+.popup-header {
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #eee;
+}
+
+.popup-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #222;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.popup-icon {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: conic-gradient(#0072b2 0deg 120deg, #e69f00 120deg 240deg, #009e73 240deg 360deg);
+}
+
+.popup-badge {
+  font-size: 9px;
+  color: #188038;
+  background: #e6f4ea;
+  padding: 2px 7px;
+  border-radius: 8px;
+  font-weight: 500;
+}
+
+.popup-body { padding: 10px 12px; }
+
+.svg-selector {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  padding: 5px 7px;
+  background: #f4f6fa;
+  border: 1px solid #e0e4ec;
+  border-radius: 4px;
+}
+
+.svg-selector-label {
+  font-size: 9px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  font-weight: 600;
+}
+
+.svg-selector select {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 10px;
+  color: #333;
+  cursor: pointer;
+}
+
+.top-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.cvd-select {
+  flex: 1;
+  padding: 5px 22px 5px 7px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 10px;
+  font-family: inherit;
+  color: #333;
+  background: #fff;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='8' height='5' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%23888'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 7px center;
+}
+
+.type-chip {
+  font-size: 10px;
+  padding: 5px 9px;
+  border-radius: 4px;
+  font-weight: 600;
+  white-space: nowrap;
+  background: #e8eef9;
+  color: #1a47a8;
+}
+
+.mismatch-banner {
+  background: #fff7e6;
+  border: 1px solid #f5d99a;
+  border-radius: 4px;
+  padding: 7px 8px;
+  margin-bottom: 8px;
+}
+
+.mismatch-title {
+  font-size: 10px;
+  font-weight: 600;
+  color: #8a5a00;
+  margin-bottom: 3px;
+}
+
+.mismatch-text {
+  font-size: 9.5px;
+  color: #6b4a00;
+  line-height: 1.35;
+}
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.toggle-label-text {
+  font-size: 11px;
+  color: #333;
+  font-weight: 500;
+}
+
+.toggle-track {
+  width: 32px;
+  height: 18px;
+  background: #4285f4;
+  border-radius: 9px;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.toggle-track.off { background: #c4c4c4; }
+
+.toggle-track.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.toggle-thumb {
+  width: 14px;
+  height: 14px;
+  background: #fff;
+  border-radius: 50%;
+  position: absolute;
+  top: 2px;
+  left: 16px;
+  transition: left 0.2s;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+}
+
+.toggle-track.off .toggle-thumb { left: 2px; }
+
+.preview-area {
+  background: #f8f8f8;
+  border: 1px solid #e4e4e4;
+  border-radius: 6px;
+  padding: 10px;
+  margin-bottom: 8px;
+}
+
+.swatch-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.swatch-row:last-of-type { margin-bottom: 0; }
+
+.swatch-row-label {
+  font-size: 9px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  font-weight: 600;
+  width: 64px;
+  flex-shrink: 0;
+}
+
+.swatch-row-strip {
+  flex: 1;
+  display: flex;
+  height: 18px;
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid #e0e0e0;
+  background: #fff;
+}
+
+.swatch-row-strip .sw {
+  flex: 1;
+  height: 100%;
+}
+
+.preview-hint {
+  font-size: 8.5px;
+  color: #999;
+  font-style: italic;
+  margin-top: 6px;
+  text-align: center;
+}
+
+.status {
+  font-size: 10px;
+  color: #555;
+  min-height: 14px;
+  margin-top: 4px;
+  text-align: center;
+}
+
+.status.error { color: #c5221f; }
+
+.popup-footer {
+  padding: 7px 12px;
+  border-top: 1px solid #eee;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.footer-meta {
+  font-size: 9px;
+  color: #999;
+}

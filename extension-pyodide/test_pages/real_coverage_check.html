@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>VCR — iframe + img-svg coverage check</title>
+  <style>
+    body { font-family: sans-serif; margin: 24px; max-width: 900px; }
+    section { margin-bottom: 36px; padding-bottom: 16px; border-bottom: 1px solid #ddd; }
+    h2 { font-size: 14px; color: #444; }
+    p { font-size: 12.5px; color: #666; }
+    iframe { width: 600px; height: 420px; border: 1px solid #ccc; }
+    img { width: 400px; height: 400px; border: 1px solid #ccc; }
+  </style>
+</head>
+<body>
+  <h1>VCR real-world coverage check</h1>
+  <p>Exercises the two paths the original test fixture doesn't: a chart
+  embedded in an &lt;iframe&gt;, and a chart embedded as
+  &lt;img src="chart.svg"&gt;. Click the VCR icon — the popup should list
+  <strong>2 SVGs found</strong> (the picker will tag the iframe one with
+  "· frame").</p>
+
+  <section>
+    <h2>1. Chart in an &lt;iframe&gt; (BarChart12.svg)</h2>
+    <p>Before the iframe fix, this chart would not appear in the popup at
+    all — content.js only ran in the top frame.</p>
+    <iframe src="../../input_svgs/BarChart12.svg"></iframe>
+  </section>
+
+  <section>
+    <h2>2. Chart as &lt;img src="..."&gt; (Heatmap20.svg)</h2>
+    <p>Before the img-svg fix, this chart would not appear either — it's
+    not a live &lt;svg&gt; DOM node, just a raster-style reference.</p>
+    <img src="../../input_svgs/Heatmap20.svg" alt="heatmap chart">
+  </section>
+</body>
+</html>
