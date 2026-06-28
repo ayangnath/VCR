@@ -3,7 +3,7 @@
   "name": "VCR — Visualization Color Repair",
   "version": "0.1.0",
   "description": "Recolor SVG charts on the page so they remain readable under color-vision deficiency.",
-  "permissions": ["activeTab", "scripting"],
+  "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": ["http://127.0.0.1:5000/*"],
   "action": {
     "default_popup": "popup.html",

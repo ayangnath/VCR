@@ -61,11 +61,33 @@ SAFE_SEQUENTIAL_ANCHORS = {
 # than pure white so the midpoint region stays visible on white page
 # backgrounds - a pure-white midpoint blends into the page and makes
 # near-zero data points invisible in rendered SVGs.
+# "key"/"name" are used by recolor_diverging_candidates() to identify and
+# label each scheme for the palette navigator; recolor_diverging() itself
+# never reads them.
 SAFE_DIVERGING_ENDPOINTS = [
-    {"left": (8, 48, 107), "mid": (232, 232, 232), "right": (166, 54, 3)},    # blue / orange
-    {"left": (63, 0, 125), "mid": (232, 232, 232), "right": (0, 68, 27)},     # purple / green
-    {"left": (5, 48, 97), "mid": (232, 232, 232), "right": (103, 0, 31)},     # blue / red-brown
+    {"key": "blue_vermillion", "name": "Blue / Vermillion",
+     "left": (8, 48, 107), "mid": (232, 232, 232), "right": (166, 54, 3)},
+    {"key": "purple_green", "name": "Purple / Green",
+     "left": (63, 0, 125), "mid": (232, 232, 232), "right": (0, 68, 27)},
+    {"key": "blue_redbrown", "name": "Blue / Red-brown",
+     "left": (5, 48, 97), "mid": (232, 232, 232), "right": (103, 0, 31)},
 ]
+
+# Display names for the safe categorical palettes, used by
+# recolor_categorical_candidates() for the palette navigator.
+_CATEGORICAL_DISPLAY_NAMES = {
+    "okabe_ito": "Okabe-Ito",
+    "ibm": "IBM",
+    "wong": "Wong",
+}
+
+# Display names for the safe sequential ramps, used by
+# recolor_sequential_candidates() for the palette navigator.
+_SEQUENTIAL_DISPLAY_NAMES = {
+    "blue": "Single-hue Blue",
+    "purple": "Single-hue Purple",
+    "orange": "Single-hue Orange",
+}
 
 
 # Find the safe palette perceptually closest to the original.
@@ -185,6 +207,50 @@ def recolor_categorical(colors, cvd_type="deutan", attempt=0):
         new = best_colors[i]
         color_map[rgb_to_hex(orig)] = rgb_to_hex(new)
     return color_map
+
+
+# List every safe categorical palette that fits the data and passes the
+# pairwise-distinguishability test, ranked best-first by min ΔE under CVD.
+# Used by the palette navigator UI. recolor_categorical() above is
+# unaffected - it still picks via rotation + perturbation fallback for
+# non-navigator callers.
+def recolor_categorical_candidates(colors, cvd_type="deutan"):
+    n = len(colors)
+    candidates = []
+
+    for name, palette in SAFE_CATEGORICAL_PALETTES.items():
+        if len(palette) < n:
+            continue
+
+        result = _find_closest_safe_palette(colors, {name: palette}, cvd_type)
+        if not result:
+            continue
+        _, safe_subset, mapping = result
+
+        ordered_safe = [None] * n
+        for orig_idx, safe_idx in mapping.items():
+            ordered_safe[orig_idx] = safe_subset[safe_idx]
+        if any(c is None for c in ordered_safe):
+            continue
+
+        test_check = test_categorical_pairwise(ordered_safe, cvd_type)
+        if not test_check.passed:
+            continue
+
+        color_map = {
+            rgb_to_hex(orig): rgb_to_hex(ordered_safe[i])
+            for i, orig in enumerate(colors)
+        }
+        candidates.append({
+            "key": name,
+            "name": _CATEGORICAL_DISPLAY_NAMES.get(name, name.replace("_", " ").title()),
+            "color_map": color_map,
+            "metric_label": "min ΔE",
+            "metric_value": float(test_check.metric_value),
+        })
+
+    candidates.sort(key=lambda c: c["metric_value"], reverse=True)
+    return candidates
 
 
 # Group colors into hue neighborhoods on the hue circle.  Returns a list
@@ -485,28 +551,90 @@ def recolor_sequential(colors, cvd_type="deutan", attempt=0, positional_order=No
     else:
         best_ramp_name = ramp_names[attempt % len(ramp_names)]
 
-    safe_ramp = SAFE_SEQUENTIAL_ANCHORS[best_ramp_name]
+    color_map, _ = _build_sequential_candidate(
+        colors, labs, sorted_indices, cluster_of, best_ramp_name, cvd_type
+    )
+    return color_map
+
+
+# Build one sequential candidate from a specific ramp name: interpolate,
+# enforce CVD invariants, and fall back to PCA ordering if the hue-cluster
+# path's within-cluster L* ordering didn't survive enforcement. Shared by
+# recolor_sequential() (single ramp, picked via inference/rotation) and
+# recolor_sequential_candidates() (every ramp, for the palette navigator).
+def _build_sequential_candidate(colors, labs, sorted_indices, cluster_of, ramp_name, cvd_type):
+    safe_ramp = SAFE_SEQUENTIAL_ANCHORS[ramp_name]
 
     # reverse so index 0 = darkest, matching our L*-ascending sort
     ramp_labs = [np.array(srgb_to_lab(c), dtype=np.float64) for c in reversed(safe_ramp)]
 
     # interpolate to get exactly n steps
-    new_colors_sorted = _interpolate_ramp(ramp_labs, n)
+    new_colors_sorted = _interpolate_ramp(ramp_labs, len(colors))
 
     # verify and fix invariants under CVD
     new_colors_sorted = _enforce_sequential_under_cvd(new_colors_sorted, cvd_type)
 
     # If we used the hue-cluster path, verify within-cluster L* ordering
     # survived CVD enforcement.  On violation, fall back to PCA sort.
+    used_indices = sorted_indices
     if cluster_of is not None and not _cluster_L_order_preserved(
             labs, new_colors_sorted, sorted_indices, cluster_of):
-        sorted_indices = _pca_sort_indices(labs)
+        used_indices = _pca_sort_indices(labs)
 
-    # map by rank: sorted_indices[0] gets darkest new, etc.
+    # map by rank: used_indices[0] gets darkest new, etc.
     color_map = {}
-    for rank, orig_idx in enumerate(sorted_indices):
+    for rank, orig_idx in enumerate(used_indices):
         color_map[rgb_to_hex(colors[orig_idx])] = rgb_to_hex(new_colors_sorted[rank])
-    return color_map
+    return color_map, new_colors_sorted
+
+
+# List a candidate for every safe sequential ramp, ranked best-first by
+# min adjacent ΔE under CVD. Used by the palette navigator UI; pass/fail
+# verification against the full invariant suite happens in main.py since
+# it needs classification_details that aren't available here.
+def recolor_sequential_candidates(colors, cvd_type="deutan", positional_order=None):
+    n = len(colors)
+    if n < 2:
+        return []
+
+    labs = [srgb_to_lab(c) for c in colors]
+    L_values = [lab[0] for lab in labs]
+
+    cluster_of = None
+    if positional_order is not None and len(positional_order) == n:
+        pos_Ls = [L_values[i] for i in positional_order]
+        first_half_mean = np.mean(pos_Ls[:max(n // 2, 1)])
+        second_half_mean = np.mean(pos_Ls[max(n // 2, 1):]) if n > 1 else first_half_mean
+        if first_half_mean > second_half_mean:
+            sorted_indices = list(reversed(positional_order))
+        else:
+            sorted_indices = list(positional_order)
+    else:
+        hue_result = _hue_cluster_sort_indices(labs)
+        if hue_result is not None:
+            sorted_indices, cluster_of = hue_result
+        else:
+            sorted_indices = _pca_sort_indices(labs)
+
+    candidates = []
+    for ramp_name in SAFE_SEQUENTIAL_ANCHORS:
+        color_map, new_colors_sorted = _build_sequential_candidate(
+            colors, labs, sorted_indices, cluster_of, ramp_name, cvd_type
+        )
+        sim_labs = [simulate_cvd_lab(c, cvd_type) for c in new_colors_sorted]
+        de_steps = [ciede2000(sim_labs[i], sim_labs[i + 1]) for i in range(len(sim_labs) - 1)]
+        min_de_step = min(de_steps) if de_steps else float("inf")
+
+        candidates.append({
+            "key": ramp_name,
+            "name": _SEQUENTIAL_DISPLAY_NAMES.get(ramp_name, f"Single-hue {ramp_name.title()}"),
+            "color_map": color_map,
+            "metric_label": "min ΔE step",
+            "metric_value": float(min_de_step),
+        })
+
+    candidates.sort(key=lambda c: c["metric_value"], reverse=True)
+    return candidates
 
 
 # Generate a CVD-accessible diverging palette by interpolating through
@@ -514,12 +642,7 @@ def recolor_sequential(colors, cvd_type="deutan", attempt=0, positional_order=No
 # Preserves the original palette's arm asymmetry: if the original has
 # unequal L* ranges on each side, the remapped version matches that ratio.
 def recolor_diverging(colors, cvd_type="deutan", attempt=0):
-    n = len(colors)
-    orig_labs = [srgb_to_lab(c) for c in colors]
-    L_values = [lab[0] for lab in orig_labs]
-    L_arr = np.array(L_values)
-
-    # --- 1. Choose the safe scheme closest to the original ---
+    # --- Choose the safe scheme closest to the original ---
     if attempt == 0:
         orig_left_lab = srgb_to_lab(colors[0])
         orig_right_lab = srgb_to_lab(colors[-1])
@@ -541,9 +664,23 @@ def recolor_diverging(colors, cvd_type="deutan", attempt=0):
     else:
         best_scheme = SAFE_DIVERGING_ENDPOINTS[attempt % len(SAFE_DIVERGING_ENDPOINTS)]
 
-    left_lab = np.array(srgb_to_lab(best_scheme["left"]), dtype=np.float64)
-    mid_lab = np.array(srgb_to_lab(best_scheme["mid"]), dtype=np.float64)
-    right_lab = np.array(srgb_to_lab(best_scheme["right"]), dtype=np.float64)
+    return _build_diverging_candidate(colors, best_scheme, cvd_type)
+
+
+# Build one diverging candidate from a specific left/mid/right scheme: split
+# the original palette into two hue-clustered arms, size them to match the
+# original's arm asymmetry, interpolate, and enforce per-arm CVD invariants.
+# Shared by recolor_diverging() (scheme picked via closest-match/rotation)
+# and recolor_diverging_candidates() (every scheme, for the palette navigator).
+def _build_diverging_candidate(colors, scheme, cvd_type):
+    n = len(colors)
+    orig_labs = [srgb_to_lab(c) for c in colors]
+    L_values = [lab[0] for lab in orig_labs]
+    L_arr = np.array(L_values)
+
+    left_lab = np.array(srgb_to_lab(scheme["left"]), dtype=np.float64)
+    mid_lab = np.array(srgb_to_lab(scheme["mid"]), dtype=np.float64)
+    right_lab = np.array(srgb_to_lab(scheme["right"]), dtype=np.float64)
 
     # --- 2. Split palette into two arms + neutrals by HUE CLUSTER ---
     # Diverging palettes have two chromatic arms with a neutral midpoint,
@@ -715,6 +852,34 @@ def recolor_diverging(colors, cvd_type="deutan", attempt=0):
     return color_map
 
 
+# List a candidate for every safe diverging endpoint scheme, ranked
+# best-first by min ΔE between each endpoint and the midpoint under CVD.
+# Used by the palette navigator UI; pass/fail verification against the full
+# invariant suite happens in main.py since it needs classification_details
+# that aren't available here.
+def recolor_diverging_candidates(colors, cvd_type="deutan"):
+    candidates = []
+
+    for scheme in SAFE_DIVERGING_ENDPOINTS:
+        color_map = _build_diverging_candidate(colors, scheme, cvd_type)
+
+        left_sim = simulate_cvd_lab(scheme["left"], cvd_type)
+        mid_sim = simulate_cvd_lab(scheme["mid"], cvd_type)
+        right_sim = simulate_cvd_lab(scheme["right"], cvd_type)
+        min_de = min(ciede2000(left_sim, mid_sim), ciede2000(mid_sim, right_sim))
+
+        candidates.append({
+            "key": scheme["key"],
+            "name": scheme["name"],
+            "color_map": color_map,
+            "metric_label": "min ΔE",
+            "metric_value": float(min_de),
+        })
+
+    candidates.sort(key=lambda c: c["metric_value"], reverse=True)
+    return candidates
+
+
 # Dispatch to the right recoloring strategy for the palette type.
 def recolor_palette(colors, palette_type, cvd_type="deutan", test_results=None,
                     attempt=0, positional_order=None):
@@ -725,5 +890,17 @@ def recolor_palette(colors, palette_type, cvd_type="deutan", test_results=None,
                                   positional_order=positional_order)
     elif palette_type == "diverging":
         return recolor_diverging(colors, cvd_type, attempt=attempt)
+    else:
+        raise ValueError(f"Unknown palette type: {palette_type}")
+
+
+# Dispatch to the right ranked-candidates lister for the palette navigator.
+def recolor_palette_candidates(colors, palette_type, cvd_type="deutan", positional_order=None):
+    if palette_type == "categorical":
+        return recolor_categorical_candidates(colors, cvd_type)
+    elif palette_type == "sequential":
+        return recolor_sequential_candidates(colors, cvd_type, positional_order=positional_order)
+    elif palette_type == "diverging":
+        return recolor_diverging_candidates(colors, cvd_type)
     else:
         raise ValueError(f"Unknown palette type: {palette_type}")

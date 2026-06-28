@@ -1,6 +1,7 @@
 # Main pipeline for CVD-aware SVG recoloring.
 # Usage: python main.py input_folder/ output_folder/ [--cvd protan|deutan|tritan]
 
+import io
 import os
 import sys
 import json
@@ -16,7 +17,7 @@ from classifier import classify_palette
 from data_signal_extractor import extract_data_signals
 from reconciler import reconcile_palette_vs_data
 from invariant_tests import run_invariant_tests, all_tests_passed
-from recolorer import recolor_palette
+from recolorer import recolor_palette, recolor_palette_candidates
 
 
 # Check whether L* values are monotonic (all increasing or all decreasing).
@@ -108,6 +109,14 @@ def _check_legend_data_consistency(colors, color_mapping, legend_colors_hex):
                 "legend_pos_after": pos_after,
             })
     return mismatches
+
+
+# Serialize a parsed SVG's tree back to a string (identical bytes to what
+# write_svg() writes to disk).
+def _serialize_svg(parsed_svg):
+    buf = io.BytesIO()
+    parsed_svg.tree.write(buf, xml_declaration=True, encoding="utf-8", pretty_print=True)
+    return buf.getvalue().decode("utf-8")
 
 
 # Make numpy types JSON-serializable.
@@ -373,6 +382,50 @@ def process_single_svg(svg_path, cvd_type="deutan", user_choice=None):
             else:
                 final_new_colors.append(c)
 
+        # Build ranked alternative palettes for the popup's palette navigator.
+        # Each candidate gets its own freshly-parsed SVG (apply_recoloring
+        # mutates its tree in place, so the winning `parsed` above can't be
+        # reused) and is re-verified against the full invariant suite -
+        # recolor_palette_candidates() only has access to the raw color
+        # science, not classification_details.
+        navigator_candidates = []
+        for cand in recolor_palette_candidates(
+            colors, final_type, cvd_type, positional_order=positional_order
+        ):
+            cand_colors_rgb = [
+                parse_color(cand["color_map"].get(rgb_to_hex(c), rgb_to_hex(c)))
+                for c in colors
+            ]
+            cand_verify = run_invariant_tests(
+                cand_colors_rgb, final_type, cvd_type,
+                classification_details=classification.details
+            )
+            if not all_tests_passed(cand_verify):
+                continue
+
+            cand_parsed = parse_svg(svg_path)
+            apply_recoloring(cand_parsed, cand["color_map"])
+            navigator_candidates.append({
+                "key": cand["key"],
+                "name": cand["name"],
+                "metric_label": cand.get("metric_label"),
+                "metric_value": cand.get("metric_value"),
+                "new_palette": [rgb_to_hex(c) for c in cand_colors_rgb],
+                "color_mapping": cand["color_map"],
+                "corrected_svg": _serialize_svg(cand_parsed),
+            })
+
+        if not navigator_candidates:
+            navigator_candidates = [{
+                "key": "custom",
+                "name": "Custom (optimized)",
+                "metric_label": None,
+                "metric_value": None,
+                "new_palette": [rgb_to_hex(c) for c in final_new_colors],
+                "color_mapping": best_mapping,
+                "corrected_svg": _serialize_svg(parsed),
+            }]
+
         phase6_report = {
             "color_mapping": best_mapping,
             "new_palette": [rgb_to_hex(c) for c in final_new_colors],
@@ -387,6 +440,7 @@ def process_single_svg(svg_path, cvd_type="deutan", user_choice=None):
             "verification_passed": best_verify_passed,
             "iterations_used": len(iteration_log),
             "iteration_log": iteration_log,
+            "candidates": navigator_candidates,
         }
         if legend_mismatches:
             phase6_report["legend_position_shifts"] = legend_mismatches

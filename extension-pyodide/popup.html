@@ -30,6 +30,24 @@
         <div class="type-chip" id="typeChip">—</div>
       </div>
 
+      <div class="spotcheck" id="spotcheck">
+        <a class="spot-check-link" id="spotCheckLink" href="#">Don't know your CVD type? Take a 10-second spot-check</a>
+        <div class="spotcheck-flow" id="spotCheckFlow" style="display:none;">
+          <div class="spotcheck-meta" id="spotCheckMeta">1 / 3</div>
+          <div class="spotcheck-question">Do these two colors look the same or different?</div>
+          <div class="spotcheck-swatches">
+            <div class="spotcheck-swatch" id="spotCheckSwatchA"></div>
+            <div class="spotcheck-swatch" id="spotCheckSwatchB"></div>
+          </div>
+          <div class="spotcheck-answers">
+            <button class="spotcheck-btn" id="spotCheckSame" type="button">Look the same</button>
+            <button class="spotcheck-btn" id="spotCheckDifferent" type="button">Look different</button>
+          </div>
+          <button class="spotcheck-cancel" id="spotCheckCancel" type="button">Cancel</button>
+        </div>
+        <div class="spotcheck-result" id="spotCheckResult" style="display:none;"></div>
+      </div>
+
       <div class="mismatch-banner" id="mismatchBanner" style="display:none;">
         <div class="mismatch-title">Palette ↔ data mismatch</div>
         <div class="mismatch-text" id="mismatchText"></div>
@@ -52,6 +70,15 @@
           <div class="swatch-row-strip" id="correctedStrip" style="opacity:0.3;"></div>
         </div>
         <div class="preview-hint" id="previewHint">Toggle above to recolor the chart on the page.</div>
+      </div>
+
+      <div class="palette-nav" id="paletteNav" style="display:none;">
+        <button class="nav-btn" id="paletteNavPrev" type="button">&#8249;</button>
+        <div class="palette-info">
+          <div class="palette-name" id="paletteName"></div>
+          <div class="palette-meta" id="paletteMeta"></div>
+        </div>
+        <button class="nav-btn" id="paletteNavNext" type="button">&#8250;</button>
       </div>
 
       <div class="status" id="status"></div>

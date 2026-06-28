@@ -15,6 +15,12 @@
 
   // svgId -> { outerHTML, parent, nextSibling } so revert restores byte-exact
   const originalsBySvg = new Map();
+  // svgId -> candidate "key" currently applied (e.g. "wong"), so the popup
+  // can restore the right palette-navigator selection on reopen instead of
+  // defaulting to rank 1 - this DOM-side state is the source of truth since
+  // it's set in the same round-trip as the visible correction, unlike the
+  // separate async chrome.storage write for the remembered categorical pick.
+  const appliedCandidateKeyById = new Map();
 
   function isPageStandaloneSvg() {
     return (
@@ -101,12 +107,13 @@
         width: Math.round(r.width),
         height: Math.round(r.height),
         corrected: !!stashed,
+        appliedCandidateKey: appliedCandidateKeyById.get(id) || null,
       });
     });
     return out;
   }
 
-  function applyCorrectedSvg(svgId, correctedSvgString) {
+  function applyCorrectedSvg(svgId, correctedSvgString, candidateKey) {
     const sel = `svg[${VCR_ID_ATTR}="${CSS.escape(svgId)}"]`;
     const svg = document.querySelector(sel);
     if (!svg) return { ok: false, error: "svg not found" };
@@ -147,6 +154,11 @@
 
     newSvg.setAttribute(VCR_ID_ATTR, svgId);
     svg.replaceWith(newSvg);
+    if (candidateKey) {
+      appliedCandidateKeyById.set(svgId, candidateKey);
+    } else {
+      appliedCandidateKeyById.delete(svgId);
+    }
     return { ok: true };
   }
 
@@ -165,6 +177,7 @@
       }
     }
     originalsBySvg.delete(svgId);
+    appliedCandidateKeyById.delete(svgId);
     return { ok: true };
   }
 
@@ -183,7 +196,7 @@
             sendResponse({ ok: true, svgs: await listSvgs() });
             break;
           case "apply-corrected":
-            sendResponse(applyCorrectedSvg(msg.svgId, msg.correctedSvg));
+            sendResponse(applyCorrectedSvg(msg.svgId, msg.correctedSvg, msg.candidateKey));
             break;
           case "revert":
             sendResponse(revert(msg.svgId));

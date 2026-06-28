@@ -37,6 +37,22 @@ def _build_response(report, parsed=None):
         except Exception:
             corrected_svg = None
 
+    # Ranked alternative palettes for the popup's palette navigator. Each
+    # candidate already carries its own corrected_svg (built in main.py,
+    # one fresh SVG parse per candidate) so the popup can switch between
+    # them without another process_svg() round-trip.
+    candidates = [
+        {
+            "key": c.get("key"),
+            "name": c.get("name"),
+            "metric_label": c.get("metric_label"),
+            "metric_value": c.get("metric_value"),
+            "new_palette": c.get("new_palette", []),
+            "corrected_svg": c.get("corrected_svg"),
+        }
+        for c in p6.get("candidates", [])
+    ]
+
     return {
         "status": report.get("status"),
         "palette_type": palette_type,
@@ -48,6 +64,7 @@ def _build_response(report, parsed=None):
         "mismatch_reason": p4.get("mismatch_explanation"),
         "warnings": report.get("warnings", []),
         "corrected_svg": corrected_svg,
+        "candidates": candidates,
     }
 
 

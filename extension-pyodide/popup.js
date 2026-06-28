@@ -91,6 +91,158 @@ function setStatus(text, isError = false) {
   el.classList.toggle("error", !!isError);
 }
 
+// Three swatch pairs, each tuned (against color_science.py's own CVD
+// simulation) to collapse sharply under exactly one CVD type while staying
+// clearly separable under the other two and under normal vision. "Looks
+// the same" on a given pair is therefore a real diagnostic signal for that
+// type, not a guess - see the plan/PR notes for the verified delta-E table.
+const SPOTCHECK_PAIRS = [
+  { type: "deutan", colorA: "rgb(220,40,100)", colorB: "rgb(160,120,100)" },
+  { type: "protan", colorA: "rgb(220,60,100)", colorB: "rgb(110,100,100)" },
+  { type: "tritan", colorA: "rgb(140,180,180)", colorB: "rgb(150,200,80)" },
+];
+
+const CVD_PREVALENCE_ORDER = ["deutan", "protan", "tritan"];
+
+const spotCheck = { step: 0, sameTypes: [] };
+
+function startSpotCheck() {
+  spotCheck.step = 0;
+  spotCheck.sameTypes = [];
+  $("#spotCheckLink").style.display = "none";
+  $("#spotCheckResult").style.display = "none";
+  $("#spotCheckFlow").style.display = "block";
+  renderSpotCheckStep();
+}
+
+function renderSpotCheckStep() {
+  const pair = SPOTCHECK_PAIRS[spotCheck.step];
+  $("#spotCheckMeta").textContent = `${spotCheck.step + 1} / ${SPOTCHECK_PAIRS.length}`;
+  $("#spotCheckSwatchA").style.background = pair.colorA;
+  $("#spotCheckSwatchB").style.background = pair.colorB;
+}
+
+function answerSpotCheck(isSame) {
+  if (isSame) spotCheck.sameTypes.push(SPOTCHECK_PAIRS[spotCheck.step].type);
+  spotCheck.step += 1;
+  if (spotCheck.step < SPOTCHECK_PAIRS.length) {
+    renderSpotCheckStep();
+  } else {
+    finishSpotCheck();
+  }
+}
+
+function finishSpotCheck() {
+  $("#spotCheckFlow").style.display = "none";
+  $("#spotCheckLink").style.display = "block";
+
+  let inferred = null;
+  for (const type of CVD_PREVALENCE_ORDER) {
+    if (spotCheck.sameTypes.includes(type)) {
+      inferred = type;
+      break;
+    }
+  }
+
+  const resultEl = $("#spotCheckResult");
+  resultEl.style.display = "block";
+  if (inferred) {
+    const label = inferred.charAt(0).toUpperCase() + inferred.slice(1) + "opia";
+    resultEl.textContent = `Looks like ${label} — CVD type set above.`;
+    $("#cvdSelect").value = inferred;
+    $("#cvdSelect").dispatchEvent(new Event("change"));
+  } else {
+    resultEl.textContent =
+      "No strong color-vision signal detected from this quick check — leaving the type as-is.";
+  }
+}
+
+function cancelSpotCheck() {
+  $("#spotCheckFlow").style.display = "none";
+  $("#spotCheckLink").style.display = "block";
+}
+
+const REMEMBERED_PALETTE_KEY = "vcrCategoricalPalette";
+
+// Currently-selected candidate for a result, or null when the result has
+// no candidates (e.g. status "passed"/"skipped"/"error"). Selection is
+// tracked per-result (on r._candidateIdx) rather than in global state so
+// each SVG in a multi-chart page keeps its own choice when switching via
+// the SVG picker.
+function activeCandidate(r) {
+  if (!r || !r.candidates || !r.candidates.length) return null;
+  return r.candidates[r._candidateIdx || 0] || r.candidates[0];
+}
+
+// Picks the default candidate index for a freshly-fetched result. Priority:
+// 1. appliedKey - what content.js says is *already showing on the page*
+//    for this SVG (set in the same round-trip as the apply, so it's
+//    immediately authoritative - this is what makes "close popup, reopen"
+//    restore the exact palette that was selected, not just that *some*
+//    correction is on).
+// 2. the remembered categorical palette, for a chart that hasn't been
+//    corrected yet this page-session.
+// 3. rank 1 (index 0, already ranked best-first by the pipeline).
+async function defaultCandidateIdx(r, appliedKey) {
+  if (!r || !r.candidates || !r.candidates.length) return 0;
+
+  if (appliedKey) {
+    const idx = r.candidates.findIndex((c) => c.key === appliedKey);
+    if (idx >= 0) return idx;
+  }
+
+  if (r.palette_type === "categorical") {
+    try {
+      const stored = await chrome.storage.local.get(REMEMBERED_PALETTE_KEY);
+      const key = stored && stored[REMEMBERED_PALETTE_KEY];
+      if (key) {
+        const idx = r.candidates.findIndex((c) => c.key === key);
+        if (idx >= 0) return idx;
+      }
+    } catch (e) {
+      // storage unavailable; fall through to rank 1
+    }
+  }
+  return 0;
+}
+
+async function navigatePalette(delta) {
+  const r = state.results[state.currentKey];
+  if (!r || !r.candidates || r.candidates.length < 2) return;
+  const n = r.candidates.length;
+  r._candidateIdx = ((r._candidateIdx || 0) + delta + n) % n;
+  renderResult();
+
+  const cand = r.candidates[r._candidateIdx];
+  const tasks = [];
+  if (state.correctionOn) tasks.push(applyOrRevert());
+  if (r.palette_type === "categorical") {
+    tasks.push(
+      chrome.storage.local.set({ [REMEMBERED_PALETTE_KEY]: cand.key }).catch(() => {
+        // storage unavailable; selection just won't persist across sessions
+      })
+    );
+  }
+  await Promise.all(tasks);
+}
+
+function renderPaletteNav(r) {
+  const nav = $("#paletteNav");
+  if (!r || !r.candidates || r.candidates.length < 2) {
+    nav.style.display = "none";
+    return;
+  }
+  nav.style.display = "flex";
+  const idx = r._candidateIdx || 0;
+  const cand = r.candidates[idx];
+  $("#paletteName").textContent = cand.name;
+  const metaParts = [`${idx + 1} / ${r.candidates.length}`];
+  if (cand.metric_label && cand.metric_value != null) {
+    metaParts.push(`${cand.metric_label} ${Number(cand.metric_value).toFixed(1)}`);
+  }
+  $("#paletteMeta").textContent = metaParts.join(" · ");
+}
+
 // Rough perceptual luma, good enough to order swatches for display --
 // original_palette/new_palette come back in DOM-encounter order (whatever
 // order the pipeline first saw each color), not sorted by lightness, so
@@ -136,12 +288,14 @@ function renderResult() {
     $("#origStrip").innerHTML = "";
     $("#correctedStrip").innerHTML = "";
     toggleEl.classList.add("disabled");
+    $("#paletteNav").style.display = "none";
     return;
   }
 
   if (r.status === "error") {
     setStatus(r.error || "Pipeline error", true);
     toggleEl.classList.add("disabled");
+    $("#paletteNav").style.display = "none";
     return;
   }
 
@@ -150,9 +304,13 @@ function renderResult() {
     : "—";
   $("#typeChip").textContent = `${t} · ${r.n_colors}`;
 
+  const cand = activeCandidate(r);
+  const correctedPalette = cand ? cand.new_palette : r.new_palette;
+  const correctedSvg = cand ? cand.corrected_svg : r.corrected_svg;
+
   const isGradient = r.palette_type && r.palette_type !== "categorical";
   $("#origStrip").innerHTML = swatchStripHtml(r.original_palette, isGradient);
-  $("#correctedStrip").innerHTML = swatchStripHtml(r.new_palette, isGradient);
+  $("#correctedStrip").innerHTML = swatchStripHtml(correctedPalette, isGradient);
 
   if (r.mismatch) {
     $("#mismatchBanner").style.display = "block";
@@ -162,7 +320,7 @@ function renderResult() {
     $("#mismatchBanner").style.display = "none";
   }
 
-  const hasCorrected = !!r.corrected_svg;
+  const hasCorrected = !!correctedSvg;
 
   if (r.status === "passed") {
     setStatus("Already accessible — no recoloring needed.");
@@ -178,6 +336,8 @@ function renderResult() {
     toggleEl.classList.remove("disabled");
   }
 
+  renderPaletteNav(r);
+
   $("#correctedLabel").textContent = state.correctionOn ? "Corrected" : "Corrected (off)";
   $("#correctedStrip").style.opacity = state.correctionOn ? "1" : "0.3";
   toggleEl.classList.toggle("off", !state.correctionOn);
@@ -188,10 +348,17 @@ async function applyOrRevert() {
   if (!cur) return;
   const r = state.results[state.currentKey];
   if (!r) return;
-  if (state.correctionOn && r.corrected_svg) {
+  const cand = activeCandidate(r);
+  const correctedSvg = cand ? cand.corrected_svg : r.corrected_svg;
+  if (state.correctionOn && correctedSvg) {
     await sendToContent(
       state.tabId,
-      { type: "apply-corrected", svgId: cur.id, correctedSvg: r.corrected_svg },
+      {
+        type: "apply-corrected",
+        svgId: cur.id,
+        correctedSvg: correctedSvg,
+        candidateKey: cand ? cand.key : null,
+      },
       cur.frameId
     );
   } else {
@@ -206,7 +373,9 @@ async function refreshDetections() {
     const key = svgKey(s);
     setStatus(`Analyzing ${i + 1} / ${state.svgs.length}…`);
     try {
-      state.results[key] = await callPyodide(s.source, state.cvd);
+      const result = await callPyodide(s.source, state.cvd);
+      result._candidateIdx = await defaultCandidateIdx(result, s.appliedCandidateKey);
+      state.results[key] = result;
     } catch (e) {
       state.results[key] = { status: "error", error: String(e.message || e) };
     }
@@ -290,6 +459,17 @@ document.addEventListener("DOMContentLoaded", () => {
     renderResult();
     await applyOrRevert();
   });
+
+  $("#paletteNavPrev").addEventListener("click", () => navigatePalette(-1));
+  $("#paletteNavNext").addEventListener("click", () => navigatePalette(1));
+
+  $("#spotCheckLink").addEventListener("click", (e) => {
+    e.preventDefault();
+    startSpotCheck();
+  });
+  $("#spotCheckSame").addEventListener("click", () => answerSpotCheck(true));
+  $("#spotCheckDifferent").addEventListener("click", () => answerSpotCheck(false));
+  $("#spotCheckCancel").addEventListener("click", cancelSpotCheck);
 
   init();
 });

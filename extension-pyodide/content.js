@@ -35,6 +35,13 @@
   // corrected serves the original bytes rather than nothing (the <img>'s
   // current src is a blob: URL at that point, not re-fetchable as source)
   const imgOriginalSourceById = new Map();
+  // svgId/imgId -> candidate "key" currently applied (e.g. "wong"), so the
+  // popup can restore the right palette-navigator selection on reopen
+  // instead of defaulting to rank 1 - this DOM-side state is the source of
+  // truth since it's set in the same round-trip as the visible correction,
+  // unlike the separate async chrome.storage write for the remembered
+  // categorical pick.
+  const appliedCandidateKeyById = new Map();
 
   function isPageStandaloneSvg() {
     return (
@@ -134,6 +141,7 @@
         width: Math.round(r.width),
         height: Math.round(r.height),
         corrected: !!stashed,
+        appliedCandidateKey: appliedCandidateKeyById.get(id) || null,
       });
     });
     return out;
@@ -143,7 +151,14 @@
     const out = [];
     const imgs = document.querySelectorAll("img");
     for (const img of imgs) {
-      if (!isSvgImgSrc(img.currentSrc || img.getAttribute("src"))) continue;
+      // Once we've tagged an <img> as VCR-managed, keep tracking it by that
+      // tag even after correction swaps its src to a blob: URL - a blob:
+      // URL doesn't end in ".svg" so isSvgImgSrc() alone would otherwise
+      // drop it from the list on the very next scan (e.g. popup reopen).
+      const alreadyTracked = img.hasAttribute(VCR_ID_ATTR);
+      if (!alreadyTracked && !isSvgImgSrc(img.currentSrc || img.getAttribute("src"))) {
+        continue;
+      }
       const r = img.getBoundingClientRect();
       if (r.width < 60 || r.height < 60) continue;
 
@@ -166,6 +181,7 @@
         width: Math.round(r.width),
         height: Math.round(r.height),
         corrected: originalImgSrcById.has(id),
+        appliedCandidateKey: appliedCandidateKeyById.get(id) || null,
       });
     }
     return out;
@@ -230,19 +246,29 @@
     }
   }
 
-  function applyCorrectedSvg(id, correctedSvgString) {
+  function applyCorrectedSvg(id, correctedSvgString, candidateKey) {
     if (!correctedSvgString || typeof correctedSvgString !== "string") {
       return { ok: false, error: "no corrected svg provided" };
     }
     const svgSel = `svg[${VCR_ID_ATTR}="${CSS.escape(id)}"]`;
     const svgEl = document.querySelector(svgSel);
-    if (svgEl) return applyCorrectedSvgEl(svgEl, id, correctedSvgString);
-
-    const imgSel = `img[${VCR_ID_ATTR}="${CSS.escape(id)}"]`;
-    const imgEl = document.querySelector(imgSel);
-    if (imgEl) return applyCorrectedImgEl(imgEl, id, correctedSvgString);
-
-    return { ok: false, error: "element not found" };
+    let result;
+    if (svgEl) {
+      result = applyCorrectedSvgEl(svgEl, id, correctedSvgString);
+    } else {
+      const imgSel = `img[${VCR_ID_ATTR}="${CSS.escape(id)}"]`;
+      const imgEl = document.querySelector(imgSel);
+      if (imgEl) result = applyCorrectedImgEl(imgEl, id, correctedSvgString);
+    }
+    if (!result) return { ok: false, error: "element not found" };
+    if (result.ok) {
+      if (candidateKey) {
+        appliedCandidateKeyById.set(id, candidateKey);
+      } else {
+        appliedCandidateKeyById.delete(id);
+      }
+    }
+    return result;
   }
 
   function revert(id) {
@@ -255,6 +281,7 @@
       const restored = tmp.querySelector("svg");
       if (restored) svgEl.replaceWith(restored);
       originalsBySvg.delete(id);
+      appliedCandidateKeyById.delete(id);
       return { ok: true };
     }
 
@@ -268,6 +295,7 @@
       if (prevBlobUrl) URL.revokeObjectURL(prevBlobUrl);
     }
     originalImgSrcById.delete(id);
+    appliedCandidateKeyById.delete(id);
     return { ok: true };
   }
 
@@ -286,7 +314,7 @@
             sendResponse({ ok: true, svgs: await listSvgs() });
             break;
           case "apply-corrected":
-            sendResponse(applyCorrectedSvg(msg.svgId, msg.correctedSvg));
+            sendResponse(applyCorrectedSvg(msg.svgId, msg.correctedSvg, msg.candidateKey));
             break;
           case "revert":
             sendResponse(revert(msg.svgId));

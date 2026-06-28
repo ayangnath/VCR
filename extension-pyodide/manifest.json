@@ -3,7 +3,7 @@
   "name": "VCR — Visualization Color Repair (Pyodide)",
   "version": "0.1.0",
   "description": "Recolor SVG charts on the page so they remain readable under color-vision deficiency. Runs entirely in-browser via Pyodide — no localhost server.",
-  "permissions": ["activeTab", "scripting", "offscreen"],
+  "permissions": ["activeTab", "scripting", "offscreen", "storage"],
   "background": {
     "service_worker": "background.js"
   },
