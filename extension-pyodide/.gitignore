@@ -2,3 +2,4 @@ pyodide/
 runtime/
 *.tar.bz2
 node_modules/
+dist/
