@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "VCR — Visualization Color Repair (Pyodide)",
   "version": "0.1.0",
-  "description": "Recolor SVG charts on the page so they remain readable under color-vision deficiency. Runs entirely in-browser via Pyodide — no localhost server.",
+  "description": "Recolors SVG charts so they stay readable under color-vision deficiency. Runs fully in-browser via Pyodide — no server.",
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
