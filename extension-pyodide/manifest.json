@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "VCR — Visualization Color Repair",
+  "name": "VCR (Visualization Color Repair)",
   "version": "0.1.0",
   "description": "Recolors SVG charts so they stay readable under color-vision deficiency. Runs fully in-browser via Pyodide — no server.",
   "icons": {
@@ -14,7 +14,7 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "VCR — Visualization Color Repair",
+    "default_title": "VCR (Visualization Color Repair)",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",
