@@ -122,6 +122,30 @@ Headline numbers from the thesis (Chapter 5):
 | Diverging    | Bidirectional separability | 3% → 77%       |
 | Diverging    | Midpoint integrity         | 90% → 97%      |
 
+### Reproducing the evaluation
+
+The pre-computed pipeline outputs for both CVD types are already committed under `results/full_corpus_deutan/` and `results/full_corpus_protan/`, so you can skip straight to the aggregation step if you just want to regenerate the tables or the figure. If you want to re-run the pipeline itself from scratch:
+
+```bash
+python3 main.py "Full Corpus/" results/full_corpus_deutan/ --cvd deutan
+python3 main.py "Full Corpus/" results/full_corpus_protan/ --cvd protan
+```
+
+Each run writes per-file JSON reports to `reports/` inside that directory, plus a `summary.json`. The aggregation script reads those reports, re-runs all six invariant checks against both the original and corrected palettes for every file, collapses the results to the thesis invariants, and writes `results/ch5_results.md`:
+
+```bash
+python3 results/aggregate.py
+```
+
+Figure 4 in the paper is produced from that markdown table using Altair:
+
+```bash
+pip install altair pandas
+python3 results/ch5_barley_plot.py
+```
+
+This writes `results/ch5_barley_plot.svg` and `results/ch5_barley_plot.png`.
+
 ## File structure
 
 ```
