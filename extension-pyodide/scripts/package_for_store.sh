@@ -40,7 +40,7 @@ PACKAGE_ITEMS=(
   runtime
 )
 
-PKG_NAME="vcr-pyodide-${VERSION}"
+PKG_NAME="vcr-${VERSION}"
 mkdir -p "$STAGE_DIR/$PKG_NAME"
 for item in "${PACKAGE_ITEMS[@]}"; do
   if [[ ! -e "$item" ]]; then
